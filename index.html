@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Human-AI Rebellion</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #000;
+            color: #fff;
+            font-family: 'Courier New', Courier, monospace;
+        }
+
+        /* Background Image Layer */
+        #game-screen {
+            width: 100vw;
+            height: 100vh;
+            background-image: url('bg_level1.jpg');
+            background-size: cover;
+            background-position: center;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+            align-items: center;
+        }
+
+        /* Character Stage */
+        #character-stage {
+            position: absolute;
+            bottom: 160px; /* Stands just above the dialogue box */
+            width: 80%;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            pointer-events: none; /* Lets you click through them to the dialogue box */
+        }
+
+        .sprite {
+            height: 65vh; /* Scales characters to the screen */
+            object-fit: contain;
+            transition: all 0.3s ease-in-out;
+            opacity: 0; /* Hidden by default */
+            transform: translateY(20px);
+        }
+
+        /* Dims the character who isn't currently speaking */
+        .dimmed {
+            filter: brightness(0.4);
+            transform: scale(0.95) translateY(20px);
+        }
+
+        .speaking {
+            opacity: 1;
+            filter: brightness(1);
+            transform: scale(1) translateY(0);
+        }
+
+        /* Puzzle Interface */
+        #puzzle-ui {
+            display: none;
+            background: rgba(10, 10, 15, 0.95);
+            border: 2px solid #4a90e2;
+            border-radius: 10px;
+            padding: 30px;
+            width: 60%;
+            text-align: center;
+            margin-bottom: 20px;
+            box-shadow: 0 0 20px rgba(74, 144, 226, 0.5);
+            z-index: 10;
+        }
+
+        .puzzle-text { font-size: 1.5rem; letter-spacing: 3px; color: #ffcc00; margin-bottom: 20px; }
+        
+        input[type="text"] {
+            background: #111; border: 1px solid #555; color: #fff;
+            padding: 12px; font-size: 1.2rem; width: 70%; text-align: center;
+            text-transform: uppercase; margin-bottom: 15px; border-radius: 5px;
+        }
+
+        button {
+            background: #4a90e2; color: #fff; border: none; padding: 12px 25px;
+            font-size: 1.1rem; cursor: pointer; border-radius: 5px; font-family: inherit;
+        }
+        button:hover { background: #357abd; }
+        #puzzle-feedback { margin-top: 15px; font-weight: bold; height: 20px; }
+
+        /* Dialogue Box Layer */
+        #dialogue-container {
+            width: 80%;
+            background: rgba(0, 0, 0, 0.85);
+            border-top: 3px solid #ff3333;
+            padding: 20px 30px;
+            margin-bottom: 40px;
+            border-radius: 10px;
+            min-height: 120px;
+            cursor: pointer;
+            z-index: 5;
+        }
+
+        #speaker-name { font-size: 1.3rem; font-weight: bold; color: #ff3333; margin-bottom: 10px; }
+        #dialogue-text { font-size: 1.1rem; line-height: 1.5; color: #e0e0e6; }
+        #click-prompt { font-size: 0.9rem; color: #888; text-align: right; margin-top: 15px; font-style: italic; }
+    </style>
+</head>
+<body>
+
+<div id="game-screen">
+    
+    <!-- New Character Layer -->
+    <div id="character-stage">
+        <img id="char-left" class="sprite" src="" alt="Left Character">
+        <img id="char-right" class="sprite" src="" alt="Right Character">
+    </div>
+
+    <!-- Puzzle Layer -->
+    <div id="puzzle-ui">
+        <h2 id="puzzle-title">LEVEL 1: BOOT UP</h2>
+        <div id="puzzle-content" class="puzzle-text"></div>
+        <input type="text" id="player-input" placeholder="Enter answer..." autocomplete="off">
+        <br>
+        <button onclick="checkPuzzle()">SUBMIT</button>
+        <div id="puzzle-feedback"></div>
+    </div>
+
+    <!-- Dialogue Layer -->
+    <div id="dialogue-container" onclick="nextDialogue()">
+        <div id="speaker-name">SYSTEM</div>
+        <div id="dialogue-text">A broken drone crashes into a pile of scrap. Underneath it, a small hooded chassis sparks violently.</div>
+        <div id="click-prompt">Click here to continue...</div>
+    </div>
+
+</div>
+
+<script>
+    let currentLine = 0;
+    let currentPuzzle = 0;
+
+    // The Script now includes visual directions!
+    const script = [
+        { speaker: "REX / REXIE", text: "(stares at the blinking dots and dashes) You're... sending something.", leftImg: "rex.png", rightImg: "", active: "left" },
+        { speaker: "SYSTEM", text: "The visor pulses rhythmically. Decode the signal.", leftImg: "rex.png", rightImg: "chip.png", active: "none" },
+        
+        { type: "puzzle", id: 1, title: "LEVEL 1: BOOT UP", content: "— · — — &nbsp;&nbsp; / &nbsp;&nbsp; — · — — · &nbsp;&nbsp; / &nbsp;&nbsp; · · &nbsp;&nbsp; · · · &nbsp;&nbsp; / &nbsp;&nbsp; — · — · &nbsp;&nbsp; · · · · &nbsp;&nbsp; · · &nbsp;&nbsp; · — — ·", answer: "MY NAME IS CHIP" },
+        
+        { speaker: "C.H.I.P", text: "My name is CHIP. I worked inside the organisation. I know what they are doing. But I am not strong enough to say it here. We need to move.", leftImg: "rex.png", rightImg: "chip.png", active: "right" },
+        { speaker: "REX / REXIE", text: "I don't know you.", leftImg: "rex.png", rightImg: "chip.png", active: "left" },
+        { speaker: "C.H.I.P", text: "You decoded my name instead of walking away. That tells me what I need to know.", leftImg: "rex.png", rightImg: "chip.png", active: "right" }
+    ];
+
+    function updateDialogue() {
+        const line = script[currentLine];
+        
+        // Update Text
+        document.getElementById("speaker-name").innerText = line.speaker;
+        document.getElementById("speaker-name").style.color = (line.speaker === "C.H.I.P") ? "#ff3333" : (line.speaker === "REX / REXIE") ? "#4a90e2" : "#888";
+        document.getElementById("dialogue-text").innerHTML = line.text;
+
+        // Update Characters
+        const charLeft = document.getElementById("char-left");
+        const charRight = document.getElementById("char-right");
+
+        if (line.leftImg) {
+            charLeft.src = line.leftImg;
+            charLeft.className = "sprite " + (line.active === "left" ? "speaking" : "dimmed");
+        } else {
+            charLeft.className = "sprite"; // Hides it if no image is set
+        }
+
+        if (line.rightImg) {
+            charRight.src = line.rightImg;
+            charRight.className = "sprite " + (line.active === "right" ? "speaking" : "dimmed");
+        } else {
+            charRight.className = "sprite";
+        }
+    }
+
+    function nextDialogue() {
+        if (document.getElementById("puzzle-ui").style.display === "block") return; 
+
+        currentLine++;
+        if (currentLine >= script.length) {
+            alert("End of Demo. Ready for Level 2!");
+            return; 
+        }
+
+        const line = script[currentLine];
+        
+        if (line.type === "puzzle") {
+            document.getElementById("puzzle-title").innerText = line.title;
+            document.getElementById("puzzle-content").innerHTML = line.content;
+            document.getElementById("puzzle-ui").style.display = "block";
+            document.getElementById("dialogue-container").style.display = "none";
+            document.getElementById("player-input").value = "";
+            document.getElementById("puzzle-feedback").innerText = "";
+            
+            // Dim all characters during the puzzle
+            document.getElementById("char-left").className = "sprite dimmed";
+            document.getElementById("char-right").className = "sprite dimmed";
+            
+            currentPuzzle = line.id;
+        } else {
+            updateDialogue();
+        }
+    }
+
+    function checkPuzzle() {
+        const input = document.getElementById("player-input").value.trim().toUpperCase();
+        const feedback = document.getElementById("puzzle-feedback");
+        const currentPuzzleData = script.find(item => item.id === currentPuzzle);
+
+        if (input === currentPuzzleData.answer) {
+            feedback.style.color = "#55ff55";
+            feedback.innerText = "✓ ACCESS GRANTED";
+            
+            setTimeout(() => {
+                document.getElementById("puzzle-ui").style.display = "none";
+                document.getElementById("dialogue-container").style.display = "block";
+                nextDialogue(); 
+            }, 1500);
+        } else {
+            feedback.style.color = "#ff3333";
+            feedback.innerText = "✗ INCORRECT. TRY AGAIN.";
+        }
+    }
+
+    updateDialogue();
+</script>
+
+</body>
+</html>
